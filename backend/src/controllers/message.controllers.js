@@ -49,9 +49,18 @@ const sendMessages = async (req, res) => {
 
     let imageUrl;
     if (image) {
-      const uploadResponse = await cloudinary.uploader.upload(image);
-      imageUrl = uploadResponse.secure_url;
+      try {
+        const uploadResponse = await cloudinary.uploader.upload(image, {
+          resource_type: "auto",
+          folder: "chat-app",
+        });
+        imageUrl = uploadResponse.secure_url;
+      } catch (uploadError) {
+        console.error("Cloudinary upload error:", uploadError);
+        return res.status(400).json({ error: "Failed to upload image" });
+      }
     }
+
     const newMessage = new Message({
       senderId,
       receiverId,
@@ -61,10 +70,18 @@ const sendMessages = async (req, res) => {
 
     await newMessage.save();
 
-    //todo implement socet.io to send
-    res.status(200).json(newMessage);
+    // Emit message via socket.io to receiver
+    const io = req.app.get("io");
+    const userSocketMap = req.app.get("userSocketMap");
+    const receiverSocketId = userSocketMap[receiverId];
+
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("newMessage", newMessage);
+    }
+
+    res.status(201).json(newMessage);
   } catch (error) {
-    console.error("Error is sednMessages controller :", error.message);
+    console.error("Error in sendMessages controller:", error.message);
     res.status(500).json({ error: "internal server error" });
   }
 };

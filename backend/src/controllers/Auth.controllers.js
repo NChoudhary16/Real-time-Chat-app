@@ -46,7 +46,6 @@ const signup = async (req, res) => {
       generateToken(newUser._id, res);
       await newUser.save();
       res.status(201).json({
-        message: "created suucessfully",
         _id: newUser._id,
         firstName: newUser.firstName,
         lastName: newUser.lastName,
@@ -65,25 +64,28 @@ const signup = async (req, res) => {
 
 //login controller
 const login = async (req, res) => {
-  const { email, password, username } = req.body;
+  const { email, password } = req.body;
   try {
-    //getting user
-    const user = await User.findOne({ email, username });
+    //validations
+    if (!email || !password) {
+      return res.status(400).json({ message: "email and password are required" });
+    }
+    //getting user by email
+    const user = await User.findOne({ email });
     //if user does not exists
     if (!user) {
       return res.status(400).json({ message: "invalid credentials!!" });
     }
     //if exists then compare password
-    const isPasswordCorrect = bcrypt.compare(password, user.password);
+    const isPasswordCorrect = await bcrypt.compare(password, user.password);
 
-    //if pass not mastched
+    //if pass not matched
     if (!isPasswordCorrect) {
       return res.status(400).json({ message: "invalid credentials!!" });
     }
-    //if evrything is correct then generate token
+    //if everything is correct then generate token
     generateToken(user._id, res);
     res.status(200).json({
-      message: `login suucessfully welcome back ${user.username}`,
       _id: user._id,
       firstName: user.firstName,
       lastName: user.lastName,
@@ -119,14 +121,22 @@ const updateProfile = async (req, res) => {
       return res.status(400).json({ message: "Profile picture is required!!" });
     }
     //setting up cloudinary
-    const uploadResponse = await cloudinary.uploader.upload(profilePic);
+    try {
+      const uploadResponse = await cloudinary.uploader.upload(profilePic, {
+        resource_type: "auto",
+        folder: "chat-app-profiles",
+      });
 
-    const updatedUser = await User.findByIdAndUpdate(
-      userId,
-      { profilePic: uploadResponse.secure_url },
-      { new: true },
-    );
-    res.status(200).json({ updatedUser });
+      const updatedUser = await User.findByIdAndUpdate(
+        userId,
+        { profilePic: uploadResponse.secure_url },
+        { new: true },
+      );
+      res.status(200).json(updatedUser);
+    } catch (uploadError) {
+      console.error("Cloudinary upload error:", uploadError);
+      return res.status(400).json({ message: "Failed to upload profile picture" });
+    }
   } catch (error) {
     console.error("Error in updateProfile COntrolelr", error.message);
     res.status(500).json({ message: "internal server error!!" });
@@ -135,12 +145,12 @@ const updateProfile = async (req, res) => {
 
 
 //checkAuth
-const checkAuth = async (req,res) => {
+const checkAuth = async (req, res) => {
   try {
-    res.status.json(req.user)
+    res.status(200).json(req.user);
   } catch (error) {
-      console.error("Error in checkAuth COntrolelr", error.message);
+    console.error("Error in checkAuth COntrolelr", error.message);
     res.status(500).json({ message: "internal server error!!" });
   }
-}
+};
 export { login, logout, signup, updateProfile,checkAuth };
